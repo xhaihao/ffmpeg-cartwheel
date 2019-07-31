@@ -1543,6 +1543,34 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
     vpx_svc_layer_id_t layer_id;
     int layer_id_valid = 0;
 
+    if (frame && (avctx->width != frame->width ||
+                  avctx->height != frame->height)) {
+        // set enc_config without reinit
+        struct vpx_codec_enc_cfg new_cfg = { 0 };
+        memcpy(&new_cfg, ctx->encoder.config.enc, sizeof(struct vpx_codec_enc_cfg));
+
+        if (frame->width <= avctx->width &&
+            frame->height <= avctx->height &&
+            !ctx->lag_in_frames && new_cfg.g_pass == VPX_RC_ONE_PASS) {
+
+            new_cfg.g_w   = frame->width;
+            new_cfg.g_h   = frame->height;
+            avctx->width  = frame->width;
+            avctx->height = frame->height;
+            vpx_codec_enc_config_set(&ctx->encoder, &new_cfg);
+        } else {
+            if (new_cfg.g_lag_in_frames > 1 || new_cfg.g_pass != VPX_RC_ONE_PASS)
+                av_log(avctx, AV_LOG_WARNING, "Only single pass mode "
+                            "with no look ahead is supported for variable "
+                            "resolution encoding without initialization.\n");
+            // since frame enlarge leads to force key frame, reinit directly
+            avctx->width  = frame->width;
+            avctx->height = frame->height;
+            avctx->codec->close(avctx);
+            avctx->codec->init(avctx);
+        }
+    }
+
     if (frame) {
         const AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_REGIONS_OF_INTEREST);
         rawimg                      = &ctx->rawimg;
@@ -1552,6 +1580,8 @@ static int vpx_encode(AVCodecContext *avctx, AVPacket *pkt,
         rawimg->stride[VPX_PLANE_Y] = frame->linesize[0];
         rawimg->stride[VPX_PLANE_U] = frame->linesize[1];
         rawimg->stride[VPX_PLANE_V] = frame->linesize[2];
+        rawimg->d_w                 = frame->width;
+        rawimg->d_h                 = frame->height;
         if (ctx->is_alpha) {
             rawimg_alpha = &ctx->rawimg_alpha;
             res = realloc_alpha_uv(avctx, frame->width, frame->height);
@@ -1830,7 +1860,7 @@ const AVCodec ff_libvpx_vp8_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VP8,
     .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
-                      AV_CODEC_CAP_OTHER_THREADS,
+                      AV_CODEC_CAP_OTHER_THREADS | AV_CODEC_CAP_PARAM_CHANGE,
     .priv_data_size = sizeof(VPxContext),
     .init           = vp8_init,
     .encode2        = vpx_encode,
@@ -1862,7 +1892,7 @@ AVCodec ff_libvpx_vp9_encoder = {
     .type           = AVMEDIA_TYPE_VIDEO,
     .id             = AV_CODEC_ID_VP9,
     .capabilities   = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_DELAY |
-                      AV_CODEC_CAP_OTHER_THREADS,
+                      AV_CODEC_CAP_OTHER_THREADS | AV_CODEC_CAP_PARAM_CHANGE,
     .priv_data_size = sizeof(VPxContext),
     .init           = vp9_init,
     .encode2        = vpx_encode,
