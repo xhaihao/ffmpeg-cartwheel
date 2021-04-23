@@ -303,6 +303,10 @@ static void dump_video_param(AVCodecContext *avctx, QSVEncContext *q,
                "NalHrdConformance: %s; SingleSeiNalUnit: %s; VuiVclHrdParameters: %s VuiNalHrdParameters: %s\n",
                print_threestate(co->NalHrdConformance), print_threestate(co->SingleSeiNalUnit),
                print_threestate(co->VuiVclHrdParameters), print_threestate(co->VuiNalHrdParameters));
+    } else if (avctx->codec_id == AV_CODEC_ID_HEVC) {
+        av_log(avctx, AV_LOG_VERBOSE,
+               "NalHrdConformance: %s; VuiNalHrdParameters: %s\n",
+               print_threestate(co->NalHrdConformance), print_threestate(co->VuiNalHrdParameters));
     }
 
     av_log(avctx, AV_LOG_VERBOSE, "FrameRateExtD: %"PRIu32"; FrameRateExtN: %"PRIu32" \n",
@@ -699,15 +703,20 @@ static int init_video_param(AVCodecContext *avctx, QSVEncContext *q)
             q->extco.CAVLC = q->cavlc ? MFX_CODINGOPTION_ON
                                       : MFX_CODINGOPTION_UNKNOWN;
 
+            if (q->single_sei_nal_unit >= 0)
+                q->extco.SingleSeiNalUnit = q->single_sei_nal_unit ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
+
+            q->extco.MaxDecFrameBuffering = q->max_dec_frame_buffering;
+        }
+
+        if (avctx->codec_id == AV_CODEC_ID_H264 ||
+            avctx->codec_id == AV_CODEC_ID_HEVC) {
             if (avctx->strict_std_compliance != FF_COMPLIANCE_NORMAL)
                 q->extco.NalHrdConformance = avctx->strict_std_compliance > FF_COMPLIANCE_NORMAL ?
                                              MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
 
-            if (q->single_sei_nal_unit >= 0)
-                q->extco.SingleSeiNalUnit = q->single_sei_nal_unit ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
             if (q->recovery_point_sei >= 0)
                 q->extco.RecoveryPointSEI = q->recovery_point_sei ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
-            q->extco.MaxDecFrameBuffering = q->max_dec_frame_buffering;
             q->extco.AUDelimiter          = q->aud ? MFX_CODINGOPTION_ON : MFX_CODINGOPTION_OFF;
         }
 
