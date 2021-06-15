@@ -110,7 +110,10 @@ static const struct {
 #if CONFIG_VAAPI
     { AV_PIX_FMT_YUYV422,
                        MFX_FOURCC_YUY2 },
-#if QSV_VERSION_ATLEAST(1, 17)
+#if QSV_VERSION_ATLEAST(1, 36)
+    { AV_PIX_FMT_0YUV,
+                       MFX_FOURCC_XYUV },
+#elif QSV_VERSION_ATLEAST(1, 17)
     { AV_PIX_FMT_0YUV,
                        MFX_FOURCC_AYUV },
 #endif
